@@ -233,6 +233,58 @@ async def cmd_list_events(message: Message):
     await message.answer(response, parse_mode="HTML")
 
 
+@router.message(Command("exportcalendar"))
+async def cmd_export_calendar(message: Message):
+    """Экспорт событий в календарь (.ics)"""
+    async with async_session_maker() as session:
+        # Получаем все предстоящие события
+        events = await EventService.get_upcoming_events(session, limit=100)
+
+    if not events:
+        await message.answer("📭 Нет событий для экспорта.")
+        return
+
+    status_msg = await message.answer("📅 Генерирую календарь...")
+
+    try:
+        # Генерируем .ics файл
+        from app.services.calendar_service import CalendarService
+        ics_content = CalendarService.generate_ics(events)
+
+        # Создаем файл
+        from io import BytesIO
+        file = BytesIO(ics_content)
+        filename = f"events_{datetime.now().strftime('%Y-%m-%d')}.ics"
+
+        # Отправляем файл
+        from aiogram.types import BufferedInputFile
+        document = BufferedInputFile(file.getvalue(), filename=filename)
+
+        await message.answer_document(
+            document=document,
+            caption=(
+                f"📅 <b>Экспорт событий в календарь</b>\n\n"
+                f"Экспортировано событий: {len(events)}\n\n"
+                f"<b>Как импортировать:</b>\n"
+                f"📱 Google Calendar: Настройки → Импорт\n"
+                f"🍎 Apple Calendar: Файл → Импорт\n"
+                f"📧 Outlook: Файл → Импорт/экспорт\n\n"
+                f"Файл содержит все предстоящие события с напоминаниями."
+            ),
+            parse_mode="HTML"
+        )
+
+        # Удаляем статусное сообщение
+        await status_msg.delete()
+
+    except Exception as e:
+        from loguru import logger
+        logger.error(f"Error exporting calendar: {e}")
+        await status_msg.edit_text(
+            "❌ Ошибка при экспорте календаря. Попробуйте позже."
+        )
+
+
 @router.message(Command("delevent"))
 async def cmd_delete_event(message: Message, state: FSMContext):
     """Начало удаления события"""
