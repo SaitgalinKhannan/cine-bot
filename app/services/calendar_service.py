@@ -1,15 +1,15 @@
 from datetime import datetime, timedelta
-from icalendar import Calendar, Event, Alarm
+from icalendar import Calendar, Event as ICalEvent, Alarm
 from typing import List
 
-from app.db.models import EventModel
+from app.db.models import Event
 
 
 class CalendarService:
     """Сервис для работы с календарями"""
 
     @staticmethod
-    def generate_ics(events: List[EventModel]) -> bytes:
+    def generate_ics(events: List[Event]) -> bytes:
         """
         Генерировать .ics файл из списка событий
 
@@ -28,7 +28,7 @@ class CalendarService:
         cal.add('x-wr-timezone', 'Europe/Moscow')
 
         for event_model in events:
-            event = Event()
+            event = ICalEvent()
             event.add('summary', event_model.title)
             event.add('dtstart', event_model.event_date)
             event.add('dtend', event_model.event_date)
@@ -58,7 +58,7 @@ class CalendarService:
         return cal.to_ical()
 
     @staticmethod
-    def generate_google_calendar_link(event: EventModel) -> str:
+    def generate_google_calendar_link(event: Event) -> str:
         """
         Генерировать ссылку для добавления события в Google Calendar
 
