@@ -1,17 +1,22 @@
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 router = Router()
 
 
 @router.message(Command("start"))
-async def cmd_start(message: Message):
+async def cmd_start(message: Message, is_admin: bool = False):
     """Обработчик команды /start"""
+    from app.handlers.menu import get_main_menu
+
     await message.answer(
-        "Привет!\n\n"
-        "Используй /help для просмотра доступных команд."
+        "👋 <b>Добро пожаловать в CineBot!</b>\n\n"
+        "Я помогу вам управлять событиями и находить файлы на Яндекс.Диске.\n\n"
+        "Выберите раздел в меню ниже или используйте команды:",
+        parse_mode="HTML",
+        reply_markup=get_main_menu(is_admin)
     )
 
 
@@ -49,8 +54,7 @@ async def cmd_help(message: Message, is_admin: bool = False):
         "• <b>Добавить/Добавь</b> — \"Добавь премьеру фильма Горизонт 20 апреля\"\n"
         "• <b>Найти/Найди</b> — \"Найди сценарий Асия\"\n"
         "• <b>Покажи</b> — \"Покажи ближайшие события\"\n"
-        "• <b>Удалить/Удали</b> — \"Удали событие 5\"\n\n"
-        "✅ В групповом чате работает без упоминания бота!\n"
+        "• <b>Удалить/Удали</b> — \"Удали событие 5\""
     )
     await message.answer(help_text, parse_mode="HTML")
 

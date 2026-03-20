@@ -228,13 +228,19 @@ async def cmd_list_events(message: Message):
         for event in type_events:
             date_formatted = event.event_date.strftime("%d.%m.%Y в %H:%M")
             safe_title = escape_html(event.title)
+
+            # Заголовок с эмодзи типа
             response += f"{emoji} <b>{safe_title}</b>\n"
-            response += f"📅 {date_formatted}\n"
 
+            # Дата курсивом
+            response += f"<i>{date_formatted}</i>"
+
+            # ID и напоминание в одной строке
+            response += f" • ID: {event.id}"
             if event.remind_days > 0:
-                response += f"⏰ Напоминание за {event.remind_days} дн.\n"
+                response += f" • Напоминание за {event.remind_days} дн."
 
-            response += f"🆔 ID: {event.id}\n\n"
+            response += "\n\n"
 
     await message.answer(response, parse_mode="HTML")
 
