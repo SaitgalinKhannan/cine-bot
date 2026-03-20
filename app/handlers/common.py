@@ -1,7 +1,7 @@
 from aiogram import Router, F
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message
 
 router = Router()
 
@@ -9,14 +9,14 @@ router = Router()
 @router.message(Command("start"))
 async def cmd_start(message: Message, is_admin: bool = False):
     """Обработчик команды /start"""
-    from app.handlers.menu import get_main_menu
+    # Inline-меню закомментировано - пока не используется
+    # from app.handlers.menu import get_main_menu
 
     await message.answer(
         "👋 <b>Добро пожаловать в CineBot!</b>\n\n"
         "Я помогу вам управлять событиями и находить файлы на Яндекс.Диске.\n\n"
-        "Выберите раздел в меню ниже или используйте команды:",
-        parse_mode="HTML",
-        reply_markup=get_main_menu(is_admin)
+        "Используйте /help для просмотра доступных команд.",
+        parse_mode="HTML"
     )
 
 

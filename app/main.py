@@ -8,7 +8,8 @@ from loguru import logger
 from app.config import settings
 from app.db.base import engine
 from app.db.models import Base
-from app.handlers import common, events, files, llm, admin, menu
+from app.handlers import common, events, files, llm, admin
+# from app.handlers import menu  # Закомментировано - inline-меню пока не используется
 from app.middleware.auth import AuthMiddleware
 from app.scheduler import setup_scheduler
 
@@ -51,7 +52,7 @@ async def main():
 
     # Регистрация роутеров
     dp.include_router(common.router)
-    dp.include_router(menu.router)
+    # dp.include_router(menu.router)  # Закомментировано - inline-меню пока не используется
     dp.include_router(admin.router)
     dp.include_router(events.router)
     dp.include_router(files.router)
@@ -63,7 +64,7 @@ async def main():
     await bot.set_my_commands([
         BotCommand(command="start", description="Запустить бота"),
         BotCommand(command="help", description="Справка по командам"),
-        BotCommand(command="menu", description="Главное меню"),
+        # BotCommand(command="menu", description="Главное меню"),  # Закомментировано - inline-меню пока не используется
         BotCommand(command="addevent", description="Добавить событие"),
         BotCommand(command="events", description="Ближайшие события"),
         BotCommand(command="delevent", description="Удалить событие"),

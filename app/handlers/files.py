@@ -1,6 +1,7 @@
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
+from urllib.parse import quote
 
 from app.db.base import async_session_maker
 from app.services.yadisk_service import YandexDiskService
@@ -52,15 +53,20 @@ async def cmd_find_file(message: Message):
 
         # Escape file data for safe HTML output
         safe_filename = escape_html(file.file_name)
-        safe_filepath = escape_html(file.file_path)
-        safe_url = escape_html(file.public_url) if file.public_url else None
 
         response += f"{file_type_emoji} <b>{safe_filename}</b>\n"
 
-        if safe_url:
+        # Формируем ссылку на файл
+        if file.public_url:
+            # Если есть публичная ссылка - используем её
+            safe_url = escape_html(file.public_url)
             response += f"🔗 <a href='{safe_url}'>Открыть файл</a>\n"
         else:
-            response += f"📂 Путь: <code>{safe_filepath}</code>\n"
+            # Если нет публичной ссылки - создаём ссылку на Яндекс.Диск
+            # Формат: https://disk.yandex.ru/client/disk/путь/к/файлу
+            encoded_path = quote(file.file_path.replace("disk:", ""))
+            yadisk_url = f"https://disk.yandex.ru/client/disk{encoded_path}"
+            response += f"🔗 <a href='{yadisk_url}'>Открыть на Яндекс.Диске</a>\n"
 
         response += "\n"
 
