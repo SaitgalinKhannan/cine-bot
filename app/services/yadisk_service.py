@@ -120,14 +120,22 @@ class YandexDiskService:
         return files_list
 
     @staticmethod
-    async def sync_files_cache(session: AsyncSession, root_path: str = "/"):
-        """Синхронизировать кэш файлов с Яндекс.Диска"""
-        logger.info(f"Starting Yandex.Disk sync from {root_path}")
+    async def sync_files_cache(session: AsyncSession, root_path: str = "/", max_files: int = 10000):
+        """
+        Синхронизировать кэш файлов с Яндекс.Диска
+        Использует get_files() для получения ВСЕХ файлов на Диске за один запрос
+
+        Args:
+            session: Сессия БД
+            root_path: Не используется, оставлен для совместимости
+            max_files: Максимальное количество файлов для кэширования
+        """
+        logger.info(f"Starting Yandex.Disk sync (max {max_files} files)")
 
         client = YandexDiskService._get_client()
 
         try:
-            YandexDiskService._log_api_call("sync_files_cache", {"root_path": root_path})
+            YandexDiskService._log_api_call("sync_files_cache", {"max_files": max_files})
 
             # Проверяем подключение
             if not client.check_token():
@@ -139,15 +147,39 @@ class YandexDiskService:
             await session.execute(delete(YandexFileCache))
             await session.commit()
 
-            # Рекурсивно обходим файлы
+            # Используем get_files() для получения ВСЕХ файлов на Диске
+            YandexDiskService._log_api_call("get_files", {"limit": max_files})
+            files_generator = client.get_files(limit=max_files)
+
             files_count = 0
-            for item in client.listdir(root_path, limit=1000):
-                if item.type == "dir":
-                    # Рекурсивно обходим папки
-                    await YandexDiskService._sync_directory(session, client, item.path)
-                elif item.type == "file":
-                    await YandexDiskService._cache_file(session, client, item)
+            for item in files_generator:
+                try:
+                    # Получаем публичную ссылку (если файл опубликован)
+                    public_url = None
+                    try:
+                        if hasattr(item, 'public_url') and item.public_url:
+                            public_url = item.public_url
+                    except:
+                        pass
+
+                    file_type = YandexDiskService._determine_file_type(item.name)
+
+                    file_cache = YandexFileCache(
+                        file_name=item.name,
+                        file_path=item.path,
+                        public_url=public_url,
+                        file_type=file_type,
+                        updated_at=datetime.now()
+                    )
+
+                    session.add(file_cache)
                     files_count += 1
+
+                    if settings.yadisk_debug:
+                        logger.debug(f"[Yandex.Disk API] Cached file: {item.name} at {item.path}")
+
+                except Exception as e:
+                    logger.error(f"Error caching file {getattr(item, 'name', 'unknown')}: {e}")
 
             await session.commit()
             logger.info(f"Yandex.Disk sync completed. Cached {files_count} files")
@@ -155,45 +187,6 @@ class YandexDiskService:
         except Exception as e:
             logger.error(f"Error syncing Yandex.Disk: {e}")
             await session.rollback()
-
-    @staticmethod
-    async def _sync_directory(session: AsyncSession, client: yadisk.YaDisk, dir_path: str):
-        """Рекурсивно синхронизировать директорию"""
-        try:
-            for item in client.listdir(dir_path, limit=1000):
-                if item.type == "dir":
-                    await YandexDiskService._sync_directory(session, client, item.path)
-                elif item.type == "file":
-                    await YandexDiskService._cache_file(session, client, item)
-        except Exception as e:
-            logger.error(f"Error syncing directory {dir_path}: {e}")
-
-    @staticmethod
-    async def _cache_file(session: AsyncSession, client: yadisk.YaDisk, file_info):
-        """Кэшировать информацию о файле"""
-        try:
-            # Получаем публичную ссылку (если файл опубликован)
-            public_url = None
-            try:
-                if hasattr(file_info, 'public_url') and file_info.public_url:
-                    public_url = file_info.public_url
-            except:
-                pass
-
-            file_type = YandexDiskService._determine_file_type(file_info.name)
-
-            file_cache = YandexFileCache(
-                file_name=file_info.name,
-                file_path=file_info.path,
-                public_url=public_url,
-                file_type=file_type,
-                updated_at=datetime.now()
-            )
-
-            session.add(file_cache)
-
-        except Exception as e:
-            logger.error(f"Error caching file {file_info.name}: {e}")
 
     @staticmethod
     async def search_files(session: AsyncSession, query: str, limit: int = 20) -> List[YandexFileCache]:

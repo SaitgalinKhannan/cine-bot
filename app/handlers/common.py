@@ -33,7 +33,8 @@ async def cmd_help(message: Message, is_admin: bool = False):
             "👑 <b>Команды администратора:</b>\n\n"
             "/addemployee — Добавить сотрудника (ответьте на его сообщение)\n"
             "/removeemployee — Удалить сотрудника (ответьте на его сообщение)\n"
-            "/listemployees — Показать список всех сотрудников\n\n"
+            "/listemployees — Показать список всех сотрудников\n"
+            "/syncfiles — Обновить кэш файлов с Яндекс.Диска\n\n"
         )
 
     help_text += (

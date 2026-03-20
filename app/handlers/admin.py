@@ -161,3 +161,34 @@ async def cmd_list_employees(message: Message, is_admin: bool = False):
     response += f"\n<i>Всего: {len(users)} чел.</i>"
 
     await message.answer(response, parse_mode="HTML")
+
+
+@router.message(Command("syncfiles"))
+async def cmd_sync_files(message: Message, is_admin: bool = False):
+    """Принудительная синхронизация кэша файлов с Яндекс.Диска (только для администраторов)"""
+    if not is_admin:
+        await message.answer("🚫 Эта команда доступна только администраторам.")
+        return
+
+    status_msg = await message.answer("🔄 Начинаю синхронизацию файлов с Яндекс.Диска...")
+
+    try:
+        async with async_session_maker() as session:
+            from app.services.yadisk_service import YandexDiskService
+            await YandexDiskService.sync_files_cache(session)
+
+        await status_msg.edit_text(
+            "✅ <b>Синхронизация завершена!</b>\n\n"
+            "Кэш файлов обновлен. Теперь команда /find будет использовать актуальный список файлов.",
+            parse_mode="HTML"
+        )
+        logger.info(f"Admin {message.from_user.id} triggered manual file sync")
+
+    except Exception as e:
+        logger.error(f"Error in manual file sync: {e}")
+        await status_msg.edit_text(
+            f"❌ <b>Ошибка синхронизации</b>\n\n"
+            f"Не удалось обновить кэш файлов. Проверьте логи для деталей.\n\n"
+            f"Ошибка: {str(e)}",
+            parse_mode="HTML"
+        )

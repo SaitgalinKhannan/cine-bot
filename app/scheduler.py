@@ -33,7 +33,7 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
 
     scheduler.add_job(
         sync_yadisk_job,
-        trigger=CronTrigger(hour=3, minute=0),
+        trigger=CronTrigger(minute=0),
         id="sync_yadisk",
         name="Sync Yandex.Disk cache",
         replace_existing=True,
@@ -41,6 +41,6 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
 
     logger.info("Scheduler configured with jobs:")
     logger.info("  - send_reminders: daily at 09:00")
-    logger.info("  - sync_yadisk: daily at 03:00")
+    logger.info("  - sync_yadisk: hourly at :00")
 
     return scheduler
