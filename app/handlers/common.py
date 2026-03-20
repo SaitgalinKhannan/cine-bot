@@ -10,7 +10,7 @@ router = Router()
 async def cmd_start(message: Message):
     """Обработчик команды /start"""
     await message.answer(
-        "👋 Привет! Я CineBot — помощник для управления событиями кинокомпании.\n\n"
+        "Привет!\n\n"
         "Используй /help для просмотра доступных команд."
     )
 
