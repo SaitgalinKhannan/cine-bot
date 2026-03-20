@@ -56,17 +56,17 @@ async def cmd_find_file(message: Message):
 
         response += f"{file_type_emoji} <b>{safe_filename}</b>\n"
 
-        # Формируем ссылку на файл
-        if file.public_url:
-            # Если есть публичная ссылка - используем её
-            safe_url = escape_html(file.public_url)
+        # Получаем публичную ссылку (создаём если нет)
+        async with async_session_maker() as session:
+            public_url = await YandexDiskService.ensure_public_url(session, file)
+
+        if public_url:
+            safe_url = escape_html(public_url)
             response += f"🔗 <a href='{safe_url}'>Открыть файл</a>\n"
         else:
-            # Если нет публичной ссылки - создаём ссылку на Яндекс.Диск
-            # Формат: https://disk.yandex.ru/client/disk/путь/к/файлу
-            encoded_path = quote(file.file_path.replace("disk:", ""))
-            yadisk_url = f"https://disk.yandex.ru/client/disk{encoded_path}"
-            response += f"🔗 <a href='{yadisk_url}'>Открыть на Яндекс.Диске</a>\n"
+            # Если не удалось получить публичную ссылку - показываем путь
+            safe_filepath = escape_html(file.file_path)
+            response += f"📂 Путь: <code>{safe_filepath}</code>\n"
 
         response += "\n"
 

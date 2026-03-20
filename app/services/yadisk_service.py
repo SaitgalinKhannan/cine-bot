@@ -218,3 +218,65 @@ class YandexDiskService:
         stmt = select(YandexFileCache).where(YandexFileCache.id == file_id)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
+
+    @staticmethod
+    def publish_file(file_path: str) -> Optional[str]:
+        """
+        Опубликовать файл и получить публичную ссылку
+
+        Args:
+            file_path: Путь к файлу на Яндекс.Диске
+
+        Returns:
+            Публичная ссылка на файл или None в случае ошибки
+        """
+        client = YandexDiskService._get_client()
+
+        try:
+            YandexDiskService._log_api_call("publish_file", {"path": file_path})
+
+            # Публикуем файл
+            result = client.publish(file_path)
+
+            # Получаем публичную ссылку
+            public_url = result.public_url if hasattr(result, 'public_url') else None
+
+            if public_url:
+                YandexDiskService._log_api_call("publish_file", {"path": file_path}, response=public_url)
+                logger.info(f"Published file: {file_path} -> {public_url}")
+                return public_url
+            else:
+                logger.warning(f"Failed to get public URL for: {file_path}")
+                return None
+
+        except Exception as e:
+            YandexDiskService._log_api_call("publish_file", {"path": file_path}, error=e)
+            logger.error(f"Error publishing file {file_path}: {e}")
+            return None
+
+    @staticmethod
+    async def ensure_public_url(session: AsyncSession, file_cache: YandexFileCache) -> Optional[str]:
+        """
+        Убедиться, что у файла есть публичная ссылка. Если нет - создать.
+
+        Args:
+            session: Сессия БД
+            file_cache: Объект файла из кэша
+
+        Returns:
+            Публичная ссылка на файл или None в случае ошибки
+        """
+        # Если уже есть публичная ссылка - возвращаем её
+        if file_cache.public_url:
+            return file_cache.public_url
+
+        # Публикуем файл
+        public_url = YandexDiskService.publish_file(file_cache.file_path)
+
+        if public_url:
+            # Обновляем запись в БД
+            file_cache.public_url = public_url
+            file_cache.updated_at = datetime.now()
+            await session.commit()
+
+        return public_url

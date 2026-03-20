@@ -46,11 +46,11 @@ class CalendarService:
             event.add('categories', [category])
 
             # Добавляем напоминание
-            if event_model.reminder_days and event_model.reminder_days > 0:
+            if event_model.remind_days and event_model.remind_days > 0:
                 alarm = Alarm()
                 alarm.add('action', 'DISPLAY')
                 alarm.add('description', f'Напоминание: {event_model.title}')
-                alarm.add('trigger', timedelta(days=-event_model.reminder_days))
+                alarm.add('trigger', timedelta(days=-event_model.remind_days))
                 event.add_component(alarm)
 
             cal.add_component(event)
