@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     # Яндекс.Диск
     yandex_disk_token: str
+    yadisk_debug: bool = False
 
     # LLM (OpenRouter)
     openrouter_api_key: str | None = None

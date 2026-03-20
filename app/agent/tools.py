@@ -128,7 +128,7 @@ async def list_events(limit: int = 10) -> str:
 @tool
 async def search_file(query: str, limit: int = 5) -> str:
     """
-    Найти файл на Яндекс.Диске.
+    Найти файл на Яндекс.Диске (поиск по кэшу).
 
     Args:
         query: Поисковый запрос (название файла или его часть)
@@ -169,6 +169,89 @@ async def search_file(query: str, limit: int = 5) -> str:
 
 
 @tool
+async def search_file_smart(query: str, limit: int = 10) -> str:
+    """
+    Умный поиск файлов на Яндекс.Диске через LLM.
+    Получает актуальный список файлов через API и использует LLM для отбора релевантных.
+
+    Args:
+        query: Поисковый запрос (например: "файлы по фильму Асия", "все сценарии")
+        limit: Максимальное количество результатов (по умолчанию 10)
+
+    Returns:
+        Список найденных файлов со ссылками или сообщение, что файлы не найдены
+    """
+    try:
+        from langchain_openai import ChatOpenAI
+        from app.config import settings
+
+        # Получаем актуальный список файлов через API
+        all_files = await YandexDiskService.get_files_realtime()
+
+        if not all_files:
+            return "📭 На Яндекс.Диске не найдено файлов"
+
+        # Формируем список названий файлов для LLM
+        file_names = [f"{i+1}. {file['name']}" for i, file in enumerate(all_files[:500])]  # Ограничиваем 500 файлами
+        files_text = "\n".join(file_names)
+
+        # Создаем промпт для LLM
+        llm = ChatOpenAI(
+            model=settings.llm_model,
+            api_key=settings.openrouter_api_key,
+            base_url=settings.llm_base_url,
+            temperature=0.1,
+        )
+
+        prompt = f"""Пользователь ищет: "{query}"
+
+Список файлов на Яндекс.Диске:
+{files_text}
+
+Задача: Выбери наиболее релевантные файлы (максимум {limit} штук).
+Верни ТОЛЬКО номера файлов через запятую (например: 1,5,12,23).
+Если подходящих файлов нет, верни "НЕТ"."""
+
+        response = await llm.ainvoke(prompt)
+        selected = response.content.strip()
+
+        if selected == "НЕТ" or not selected:
+            return f"📭 Файлы по запросу «{query}» не найдены"
+
+        # Парсим номера выбранных файлов
+        try:
+            indices = [int(num.strip()) - 1 for num in selected.split(",") if num.strip().isdigit()]
+        except:
+            return f"📭 Файлы по запросу «{query}» не найдены"
+
+        # Формируем результат
+        emoji_map = {
+            "video": "🎬",
+            "photo": "🖼",
+            "document": "📄",
+            "scenario": "📝"
+        }
+
+        result = f"📁 Найдено файлов: {len(indices)}\n\n"
+
+        for idx in indices[:limit]:
+            if 0 <= idx < len(all_files):
+                file = all_files[idx]
+                emoji = emoji_map.get(file['type'], "📎")
+                result += f"{emoji} {file['name']}\n"
+                if file.get('public_url'):
+                    result += f"🔗 {file['public_url']}\n"
+                else:
+                    result += f"📂 {file['path']}\n"
+                result += "\n"
+
+        return result
+
+    except Exception as e:
+        return f"❌ Ошибка при умном поиске файлов: {str(e)}"
+
+
+@tool
 async def delete_event(event_id: int) -> str:
     """
     Удалить событие по ID.
@@ -206,5 +289,6 @@ AGENT_TOOLS = [
     add_event,
     list_events,
     search_file,
+    search_file_smart,
     delete_event,
 ]

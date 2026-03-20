@@ -14,6 +14,20 @@ class YandexDiskService:
     """Сервис для работы с Яндекс.Диском"""
 
     @staticmethod
+    def _log_api_call(operation: str, params: dict, response: any = None, error: Exception = None):
+        """Логировать вызов API Яндекс.Диска (если включен debug режим)"""
+        if not settings.yadisk_debug:
+            return
+
+        log_msg = f"[Yandex.Disk API] {operation}"
+        logger.debug(f"{log_msg} | Params: {params}")
+
+        if error:
+            logger.debug(f"{log_msg} | Error: {error}")
+        elif response:
+            logger.debug(f"{log_msg} | Response: {response}")
+
+    @staticmethod
     def _get_client() -> yadisk.YaDisk:
         """Получить клиент Яндекс.Диска"""
         return yadisk.YaDisk(token=settings.yandex_disk_token)
@@ -47,6 +61,69 @@ class YandexDiskService:
         return "document"
 
     @staticmethod
+    async def get_files_realtime(root_path: str = "/", max_depth: int = 10) -> List[dict]:
+        """
+        Получить список всех файлов через API в реальном времени (без кэша)
+
+        Args:
+            root_path: Корневая папка для поиска
+            max_depth: Максимальная глубина рекурсии
+
+        Returns:
+            Список словарей с информацией о файлах
+        """
+        YandexDiskService._log_api_call("get_files_realtime", {"root_path": root_path, "max_depth": max_depth})
+
+        client = YandexDiskService._get_client()
+        files_list = []
+
+        try:
+            # Проверяем подключение
+            if not client.check_token():
+                YandexDiskService._log_api_call("check_token", {}, error=Exception("Invalid token"))
+                logger.error("Invalid Yandex.Disk token")
+                return files_list
+
+            YandexDiskService._log_api_call("check_token", {}, response="Token valid")
+
+            # Рекурсивно обходим файлы
+            def collect_files(path: str, depth: int = 0):
+                if depth > max_depth:
+                    return
+
+                try:
+                    YandexDiskService._log_api_call("listdir", {"path": path, "depth": depth})
+
+                    for item in client.listdir(path, limit=1000):
+                        if item.type == "dir":
+                            collect_files(item.path, depth + 1)
+                        elif item.type == "file":
+                            file_info = {
+                                "name": item.name,
+                                "path": item.path,
+                                "type": YandexDiskService._determine_file_type(item.name),
+                                "size": getattr(item, 'size', 0),
+                                "public_url": getattr(item, 'public_url', None)
+                            }
+                            files_list.append(file_info)
+
+                            if settings.yadisk_debug:
+                                logger.debug(f"[Yandex.Disk API] Found file: {file_info['name']}")
+
+                except Exception as e:
+                    YandexDiskService._log_api_call("listdir", {"path": path}, error=e)
+                    logger.error(f"Error listing directory {path}: {e}")
+
+            collect_files(root_path)
+            YandexDiskService._log_api_call("get_files_realtime", {"root_path": root_path}, response=f"Found {len(files_list)} files")
+
+        except Exception as e:
+            YandexDiskService._log_api_call("get_files_realtime", {"root_path": root_path}, error=e)
+            logger.error(f"Error getting files from Yandex.Disk: {e}")
+
+        return files_list
+
+    @staticmethod
     async def sync_files_cache(session: AsyncSession, root_path: str = "/"):
         """Синхронизировать кэш файлов с Яндекс.Диска"""
         logger.info(f"Starting Yandex.Disk sync from {root_path}")
@@ -54,8 +131,11 @@ class YandexDiskService:
         client = YandexDiskService._get_client()
 
         try:
+            YandexDiskService._log_api_call("sync_files_cache", {"root_path": root_path})
+
             # Проверяем подключение
             if not client.check_token():
+                YandexDiskService._log_api_call("check_token", {}, error=Exception("Invalid token"))
                 logger.error("Invalid Yandex.Disk token")
                 return
 
