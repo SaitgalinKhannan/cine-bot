@@ -1,14 +1,18 @@
 from datetime import datetime
+from io import BytesIO
 
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
+from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove, BufferedInputFile
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import async_session_maker
 from app.services.event_service import EventService
+from app.services.calendar_service import CalendarService
 from app.states.event_states import AddEventFSM, DeleteEventFSM
+from app.utils import escape_html
 
 router = Router()
 
@@ -178,10 +182,11 @@ async def process_remind_days(message: Message, state: FSMContext):
         # Формируем подтверждение
         emoji = EVENT_TYPE_EMOJI.get(event.event_type, "📌")
         date_formatted = event.event_date.strftime("%d.%m.%Y в %H:%M")
+        safe_title = escape_html(event.title)
 
         confirmation = (
             f"✅ <b>Событие добавлено!</b>\n\n"
-            f"{emoji} <b>{event.title}</b>\n"
+            f"{emoji} <b>{safe_title}</b>\n"
             f"📅 {date_formatted}\n"
         )
 
@@ -222,7 +227,8 @@ async def cmd_list_events(message: Message):
 
         for event in type_events:
             date_formatted = event.event_date.strftime("%d.%m.%Y в %H:%M")
-            response += f"{emoji} <b>{event.title}</b>\n"
+            safe_title = escape_html(event.title)
+            response += f"{emoji} <b>{safe_title}</b>\n"
             response += f"📅 {date_formatted}\n"
 
             if event.remind_days > 0:
@@ -248,16 +254,13 @@ async def cmd_export_calendar(message: Message):
 
     try:
         # Генерируем .ics файл
-        from app.services.calendar_service import CalendarService
         ics_content = CalendarService.generate_ics(events)
 
         # Создаем файл
-        from io import BytesIO
         file = BytesIO(ics_content)
         filename = f"events_{datetime.now().strftime('%Y-%m-%d')}.ics"
 
         # Отправляем файл
-        from aiogram.types import BufferedInputFile
         document = BufferedInputFile(file.getvalue(), filename=filename)
 
         await message.answer_document(
@@ -278,8 +281,7 @@ async def cmd_export_calendar(message: Message):
         await status_msg.delete()
 
     except Exception as e:
-        from loguru import logger
-        logger.error(f"Error exporting calendar: {e}")
+        logger.error(f"Error exporting calendar: {e}", exc_info=True)
         await status_msg.edit_text(
             "❌ Ошибка при экспорте календаря. Попробуйте позже."
         )
@@ -302,7 +304,8 @@ async def cmd_delete_event(message: Message, state: FSMContext):
     for event in events:
         emoji = EVENT_TYPE_EMOJI.get(event.event_type, "📌")
         date_formatted = event.event_date.strftime("%d.%m.%Y в %H:%M")
-        response += f"🆔 <code>{event.id}</code> — {emoji} {event.title} ({date_formatted})\n"
+        safe_title = escape_html(event.title)
+        response += f"🆔 <code>{event.id}</code> — {emoji} {safe_title} ({date_formatted})\n"
 
     response += "\nДля отмены используйте /cancel"
 
@@ -325,9 +328,10 @@ async def process_delete_event(message: Message, state: FSMContext):
                 return
 
             # Удаляем событие
+            safe_title = escape_html(event.title)
             await EventService.delete_event(session, event_id)
 
-        await message.answer(f"✅ Событие «{event.title}» удалено.")
+        await message.answer(f"✅ Событие «{safe_title}» удалено.")
         await state.clear()
 
     except ValueError:

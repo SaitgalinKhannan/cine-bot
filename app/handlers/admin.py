@@ -185,10 +185,9 @@ async def cmd_sync_files(message: Message, is_admin: bool = False):
         logger.info(f"Admin {message.from_user.id} triggered manual file sync")
 
     except Exception as e:
-        logger.error(f"Error in manual file sync: {e}")
+        logger.error(f"Error in manual file sync: {e}", exc_info=True)
         await status_msg.edit_text(
-            f"❌ <b>Ошибка синхронизации</b>\n\n"
-            f"Не удалось обновить кэш файлов. Проверьте логи для деталей.\n\n"
-            f"Ошибка: {str(e)}",
+            "❌ <b>Ошибка синхронизации</b>\n\n"
+            "Не удалось обновить кэш файлов. Попробуйте позже.",
             parse_mode="HTML"
         )

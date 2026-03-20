@@ -4,6 +4,7 @@ from aiogram.types import Message
 
 from app.db.base import async_session_maker
 from app.services.yadisk_service import YandexDiskService
+from app.utils import escape_html
 
 router = Router()
 
@@ -23,14 +24,17 @@ async def cmd_find_file(message: Message):
         )
         return
 
-    await message.answer(f"🔍 Ищу файлы по запросу: <b>{query}</b>...", parse_mode="HTML")
+    # Escape query for safe HTML output
+    safe_query = escape_html(query)
+
+    await message.answer(f"🔍 Ищу файлы по запросу: <b>{safe_query}</b>...", parse_mode="HTML")
 
     async with async_session_maker() as session:
         results = await YandexDiskService.search_files(session, query)
 
     if not results:
         await message.answer(
-            f"📭 Файлы по запросу «{query}» не найдены.\n\n"
+            f"📭 Файлы по запросу «{safe_query}» не найдены.\n\n"
             "Попробуйте изменить запрос или проверьте, что файлы есть на Яндекс.Диске."
         )
         return
@@ -46,12 +50,17 @@ async def cmd_find_file(message: Message):
             "scenario": "📝",
         }.get(file.file_type, "📎")
 
-        response += f"{file_type_emoji} <b>{file.file_name}</b>\n"
+        # Escape file data for safe HTML output
+        safe_filename = escape_html(file.file_name)
+        safe_filepath = escape_html(file.file_path)
+        safe_url = escape_html(file.public_url) if file.public_url else None
 
-        if file.public_url:
-            response += f"🔗 <a href='{file.public_url}'>Открыть файл</a>\n"
+        response += f"{file_type_emoji} <b>{safe_filename}</b>\n"
+
+        if safe_url:
+            response += f"🔗 <a href='{safe_url}'>Открыть файл</a>\n"
         else:
-            response += f"📂 Путь: <code>{file.file_path}</code>\n"
+            response += f"📂 Путь: <code>{safe_filepath}</code>\n"
 
         response += "\n"
 
