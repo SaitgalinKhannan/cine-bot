@@ -61,18 +61,19 @@ class YandexDiskService:
         return "document"
 
     @staticmethod
-    async def get_files_realtime(root_path: str = "/", max_depth: int = 10) -> List[dict]:
+    async def get_files_realtime(root_path: str = "/", max_files: int = 10000) -> List[dict]:
         """
         Получить список всех файлов через API в реальном времени (без кэша)
+        Использует встроенный метод get_files() для получения ВСЕХ файлов на Диске
 
         Args:
-            root_path: Корневая папка для поиска
-            max_depth: Максимальная глубина рекурсии
+            root_path: Корневая папка для поиска (не используется, оставлен для совместимости)
+            max_files: Максимальное количество файлов для получения
 
         Returns:
             Список словарей с информацией о файлах
         """
-        YandexDiskService._log_api_call("get_files_realtime", {"root_path": root_path, "max_depth": max_depth})
+        YandexDiskService._log_api_call("get_files_realtime", {"max_files": max_files})
 
         client = YandexDiskService._get_client()
         files_list = []
@@ -86,39 +87,34 @@ class YandexDiskService:
 
             YandexDiskService._log_api_call("check_token", {}, response="Token valid")
 
-            # Рекурсивно обходим файлы
-            def collect_files(path: str, depth: int = 0):
-                if depth > max_depth:
-                    return
+            # Используем get_files() для получения ВСЕХ файлов на Диске
+            # Это встроенный метод API, который ищет по всем папкам
+            YandexDiskService._log_api_call("get_files", {"limit": max_files})
 
+            files_generator = client.get_files(limit=max_files)
+
+            for item in files_generator:
                 try:
-                    YandexDiskService._log_api_call("listdir", {"path": path, "depth": depth})
+                    file_info = {
+                        "name": item.name,
+                        "path": item.path,
+                        "type": YandexDiskService._determine_file_type(item.name),
+                        "size": getattr(item, 'size', 0),
+                        "public_url": getattr(item, 'public_url', None)
+                    }
+                    files_list.append(file_info)
 
-                    for item in client.listdir(path, limit=1000):
-                        if item.type == "dir":
-                            collect_files(item.path, depth + 1)
-                        elif item.type == "file":
-                            file_info = {
-                                "name": item.name,
-                                "path": item.path,
-                                "type": YandexDiskService._determine_file_type(item.name),
-                                "size": getattr(item, 'size', 0),
-                                "public_url": getattr(item, 'public_url', None)
-                            }
-                            files_list.append(file_info)
-
-                            if settings.yadisk_debug:
-                                logger.debug(f"[Yandex.Disk API] Found file: {file_info['name']}")
+                    if settings.yadisk_debug:
+                        logger.debug(f"[Yandex.Disk API] Found file: {file_info['name']} at {file_info['path']}")
 
                 except Exception as e:
-                    YandexDiskService._log_api_call("listdir", {"path": path}, error=e)
-                    logger.error(f"Error listing directory {path}: {e}")
+                    logger.error(f"Error processing file {getattr(item, 'name', 'unknown')}: {e}")
 
-            collect_files(root_path)
-            YandexDiskService._log_api_call("get_files_realtime", {"root_path": root_path}, response=f"Found {len(files_list)} files")
+            YandexDiskService._log_api_call("get_files_realtime", {"max_files": max_files}, response=f"Found {len(files_list)} files")
+            logger.info(f"Retrieved {len(files_list)} files from Yandex.Disk")
 
         except Exception as e:
-            YandexDiskService._log_api_call("get_files_realtime", {"root_path": root_path}, error=e)
+            YandexDiskService._log_api_call("get_files_realtime", {"max_files": max_files}, error=e)
             logger.error(f"Error getting files from Yandex.Disk: {e}")
 
         return files_list
