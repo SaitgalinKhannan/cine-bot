@@ -51,8 +51,13 @@ async def handle_natural_language(message: Message):
             chat_id=message.chat.id
         )
 
-        # Отправляем ответ
-        await message.answer(response, parse_mode="HTML")
+        # Проверяем, что ответ не пустой
+        if not response or not response.strip():
+            logger.warning("Agent returned empty response")
+            response = "❌ Не удалось получить ответ. Попробуйте переформулировать запрос."
+
+        # Отправляем ответ (ссылки на файлы будут без preview)
+        await message.answer(response, parse_mode="HTML", disable_web_page_preview=True)
 
     except Exception as e:
         logger.error(f"Error in natural language handler: {e}")

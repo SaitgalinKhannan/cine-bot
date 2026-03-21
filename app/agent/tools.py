@@ -173,7 +173,7 @@ async def search_file(query: str, limit: int = 5) -> str:
                 emoji = emoji_map.get(file.file_type, "📎")
                 result += f"{emoji} {file.file_name}\n"
                 if file.public_url:
-                    result += f"🔗 {file.public_url}\n"
+                    result += f"🔗 <a href='{file.public_url}'>Открыть</a>\n"
                 else:
                     result += f"📂 {file.file_path}\n"
                 result += "\n"
@@ -285,7 +285,7 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
 
                     # Показываем ссылку
                     if file.public_url:
-                        result += f"🔗 {file.public_url}\n"
+                        result += f"🔗 <a href='{file.public_url}'>Открыть</a>\n"
                     else:
                         result += f"📂 {file.file_path}\n"
                     result += "\n"

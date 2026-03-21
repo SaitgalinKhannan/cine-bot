@@ -154,7 +154,12 @@ class CineBotAgent:
 
                 # Если нет вызовов инструментов, возвращаем текстовый ответ
                 if hasattr(response, 'content'):
-                    return response.content
+                    content = response.content.strip()
+                    if content:
+                        return content
+                    else:
+                        logger.warning("LLM returned empty content")
+                        return "❌ Не удалось получить ответ. Попробуйте переформулировать запрос."
                 else:
                     return str(response)
 
