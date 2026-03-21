@@ -256,6 +256,14 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
                 file = files_for_llm[idx]
                 emoji = emoji_map.get(file['type'], "📎")
                 result += f"{emoji} {file['name']}\n"
+
+                # Если нет публичной ссылки - создаем её
+                if not file.get('public_url'):
+                    public_url = YandexDiskService.publish_file(file['path'])
+                    if public_url:
+                        file['public_url'] = public_url
+
+                # Показываем ссылку
                 if file.get('public_url'):
                     result += f"🔗 {file['public_url']}\n"
                 else:
