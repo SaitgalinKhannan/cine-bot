@@ -2,7 +2,7 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from app.agent.tools import search_file_smart
+from app.agent.tools import search_file
 from app.utils import escape_html
 
 router = Router()
@@ -28,8 +28,7 @@ async def cmd_find_file(message: Message):
 
     await message.answer(f"🔍 Ищу файлы по запросу: <b>{safe_query}</b>...", parse_mode="HTML")
 
-    # Используем умный поиск через LLM (тот же, что и в агенте)
-    result = await search_file_smart.ainvoke({"query": query, "limit": 10})
+    result = await search_file.ainvoke({"query": query, "limit": 10})
 
     # Экранируем HTML-символы в ответе
     safe_result = escape_html(result)
