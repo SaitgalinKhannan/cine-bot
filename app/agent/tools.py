@@ -17,12 +17,12 @@ from app.services.yadisk_service import YandexDiskService
 
 @tool
 async def add_event(
-    title: str,
-    date_str: str,
-    event_type: str = "other",
-    remind_days: int = 2,
-    chat_id: int = 0,
-    description: Optional[str] = None
+        title: str,
+        date_str: str,
+        event_type: str = "other",
+        remind_days: int = 2,
+        chat_id: int = 0,
+        description: Optional[str] = None
 ) -> str:
     """
     Добавить новое событие в календарь.
@@ -39,7 +39,7 @@ async def add_event(
         Сообщение об успешном добавлении или ошибке
     """
     max_retries = 3
-    
+
     for attempt in range(max_retries):
         try:
             # Парсинг даты
@@ -102,7 +102,7 @@ async def list_events(limit: int = 10) -> str:
         Список ближайших событий или сообщение, что событий нет
     """
     max_retries = 3
-    
+
     for attempt in range(max_retries):
         try:
             async with async_session_maker() as session:
@@ -151,7 +151,7 @@ async def search_file(query: str, limit: int = 5) -> str:
         Список найденных файлов со ссылками или сообщение, что файлы не найдены
     """
     max_retries = 3
-    
+
     for attempt in range(max_retries):
         try:
             async with async_session_maker() as session:
@@ -201,7 +201,7 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
         Список найденных файлов со ссылками или сообщение, что файлы не найдены
     """
     max_retries = 3
-    
+
     for attempt in range(max_retries):
         try:
             from langchain_openai import ChatOpenAI
@@ -231,7 +231,7 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
             files_for_llm = filtered_files[:500]
 
             # Формируем список названий файлов для LLM
-            file_names = [f"{i+1}. {file['name']}" for i, file in enumerate(files_for_llm)]
+            file_names = [f"{i + 1}. {file['name']}" for i, file in enumerate(files_for_llm)]
             files_text = "\n".join(file_names)
 
             # Создаем промпт для LLM
@@ -302,7 +302,7 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
 
 
 @tool
-async def delete_event(event_id: int) -> str:
+async def delete_event(event_id: int) -> str | None:
     """
     Удалить событие по ID.
 
@@ -313,7 +313,7 @@ async def delete_event(event_id: int) -> str:
         Сообщение об успешном удалении или ошибке
     """
     max_retries = 3
-    
+
     for attempt in range(max_retries):
         try:
             async with async_session_maker() as session:
@@ -338,6 +338,8 @@ async def delete_event(event_id: int) -> str:
                 await asyncio.sleep(0.5 * (attempt + 1))
             else:
                 return "❌ Произошла ошибка при удалении события. Пожалуйста, попробуйте ещё раз."
+
+    return None
 
 
 # Список всех инструментов для агента
