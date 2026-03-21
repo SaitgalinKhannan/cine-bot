@@ -10,7 +10,7 @@ router = Router()
 
 @router.message(Command("find"))
 async def cmd_find_file(message: Message):
-    """Поиск файла на Яндекс.Диске через LLM (умный поиск)"""
+    """Поиск файла на Яндекс.Диске (быстрый поиск по кэшу с умной сортировкой)"""
     # Извлекаем запрос из команды
     query = message.text.replace("/find", "").strip()
 

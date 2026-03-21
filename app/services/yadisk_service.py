@@ -190,27 +190,77 @@ class YandexDiskService:
 
     @staticmethod
     async def search_files(session: AsyncSession, query: str, limit: int = 20) -> List[YandexFileCache]:
-        """Поиск файлов в кэше по запросу"""
-        query_lower = query.lower()
+        """
+        Поиск файлов в кэше по запросу с умной сортировкой по релевантности.
+        
+        Алгоритм:
+        1. Разбиваем запрос на слова
+        2. Ищем файлы, содержащие хотя бы часть слов из запроса
+        3. Сортируем по релевантности (точное вхождение > все слова > часть слов)
+        """
+        query_lower = query.lower().strip()
+        
+        if not query_lower:
+            return []
 
-        # Разбиваем запрос на слова для более гибкого поиска
-        query_words = query_lower.split()
+        # Разбиваем запрос на слова (минимум 2 символа)
+        query_words = [w for w in query_lower.split() if len(w) >= 2]
+        
+        if not query_words:
+            return []
 
         stmt = select(YandexFileCache)
         result = await session.execute(stmt)
         all_files = list(result.scalars().all())
 
-        # Фильтруем файлы, которые содержат все слова из запроса
-        matching_files = []
+        # Словарь для хранения файлов и их "веса" релевантности
+        scored_files = []
+        
         for file in all_files:
             file_name_lower = file.file_name.lower()
-            if all(word in file_name_lower for word in query_words):
-                matching_files.append(file)
+            
+            # Проверяем, сколько слов из запроса найдено в имени файла
+            matched_words = [w for w in query_words if w in file_name_lower]
+            matched_count = len(matched_words)
+            
+            if matched_count == 0:
+                continue
+            
+            # Вычисляем релевантность
+            # 1. Точное вхождение всего запроса — высший приоритет
+            exact_match = 1 if query_lower in file_name_lower else 0
+            
+            # 2. Процент совпавших слов
+            word_match_ratio = matched_count / len(query_words)
+            
+            # 3. Позиция первого вхождения (чем раньше, тем лучше)
+            first_position = file_name_lower.find(query_words[0]) if query_words[0] in file_name_lower else 999
+            position_score = 1.0 / (first_position + 1)
+            
+            # 4. Длина совпадения (чем больше слов подряд, тем лучше)
+            consecutive_score = 0
+            for i in range(len(query_words)):
+                for j in range(i + 1, len(query_words) + 1):
+                    phrase = ' '.join(query_words[i:j])
+                    if phrase in file_name_lower:
+                        consecutive_score = max(consecutive_score, j - i)
+            consecutive_score = consecutive_score / len(query_words) if query_words else 0
+            
+            # Итоговый вес
+            score = (
+                exact_match * 10 +  # Точное вхождение
+                word_match_ratio * 5 +  # Процент слов
+                position_score * 3 +  # Позиция
+                consecutive_score * 2  # Последовательные слова
+            )
+            
+            scored_files.append((score, file))
 
-        # Сортируем по релевантности (файлы, где запрос встречается раньше)
-        matching_files.sort(key=lambda f: f.file_name.lower().find(query_lower))
+        # Сортируем по убыванию релевантности
+        scored_files.sort(key=lambda x: (-x[0], x[1].file_name))
 
-        return matching_files[:limit]
+        # Возвращаем топ файлов
+        return [file for _, file in scored_files[:limit]]
 
     @staticmethod
     async def get_all_files_batched(session: AsyncSession, batch_size: int = 5000):
