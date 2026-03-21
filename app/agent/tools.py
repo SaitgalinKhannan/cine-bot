@@ -191,8 +191,25 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
         if not all_files:
             return "📭 На Яндекс.Диске не найдено файлов"
 
+        # Предварительная фильтрация: ищем файлы, содержащие хотя бы одно слово из запроса
+        query_words = query.lower().split()
+        filtered_files = []
+
+        for file in all_files:
+            file_name_lower = file['name'].lower()
+            # Если хотя бы одно слово из запроса есть в названии файла
+            if any(word in file_name_lower for word in query_words):
+                filtered_files.append(file)
+
+        # Если после фильтрации ничего не найдено, возвращаем пустой результат
+        if not filtered_files:
+            return f"📭 Файлы по запросу «{query}» не найдены"
+
+        # Ограничиваем до 500 файлов для отправки в LLM (берем отфильтрованные)
+        files_for_llm = filtered_files[:500]
+
         # Формируем список названий файлов для LLM
-        file_names = [f"{i+1}. {file['name']}" for i, file in enumerate(all_files[:500])]  # Ограничиваем 500 файлами
+        file_names = [f"{i+1}. {file['name']}" for i, file in enumerate(files_for_llm)]
         files_text = "\n".join(file_names)
 
         # Создаем промпт для LLM
@@ -235,8 +252,8 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
         result = f"📁 Найдено файлов: {len(indices)}\n\n"
 
         for idx in indices[:limit]:
-            if 0 <= idx < len(all_files):
-                file = all_files[idx]
+            if 0 <= idx < len(files_for_llm):
+                file = files_for_llm[idx]
                 emoji = emoji_map.get(file['type'], "📎")
                 result += f"{emoji} {file['name']}\n"
                 if file.get('public_url'):
