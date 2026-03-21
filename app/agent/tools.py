@@ -3,6 +3,7 @@
 Эти функции вызываются агентом для выполнения действий
 """
 
+import asyncio
 from datetime import datetime
 from typing import Optional
 
@@ -37,50 +38,56 @@ async def add_event(
     Returns:
         Сообщение об успешном добавлении или ошибке
     """
-    try:
-        # Парсинг даты
-        event_date = datetime.strptime(date_str, "%d.%m.%Y %H:%M")
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            # Парсинг даты
+            event_date = datetime.strptime(date_str, "%d.%m.%Y %H:%M")
 
-        # Проверка, что дата в будущем
-        if event_date <= datetime.now():
-            return "❌ Ошибка: дата должна быть в будущем"
+            # Проверка, что дата в будущем
+            if event_date <= datetime.now():
+                return "❌ Ошибка: дата должна быть в будущем"
 
-        # Валидация типа события
-        valid_types = ["premiere", "meeting", "birthday", "other"]
-        if event_type not in valid_types:
-            event_type = "other"
+            # Валидация типа события
+            valid_types = ["premiere", "meeting", "birthday", "other"]
+            if event_type not in valid_types:
+                event_type = "other"
 
-        # Сохранение в БД
-        async with async_session_maker() as session:
-            event = await EventService.create_event(
-                session=session,
-                title=title,
-                event_type=event_type,
-                event_date=event_date,
-                chat_id=chat_id,
-                remind_days=remind_days,
-                description=description
+            # Сохранение в БД
+            async with async_session_maker() as session:
+                event = await EventService.create_event(
+                    session=session,
+                    title=title,
+                    event_type=event_type,
+                    event_date=event_date,
+                    chat_id=chat_id,
+                    remind_days=remind_days,
+                    description=description
+                )
+
+            emoji_map = {
+                "premiere": "🎬",
+                "meeting": "📅",
+                "birthday": "🎂",
+                "other": "📌"
+            }
+            emoji = emoji_map.get(event_type, "📌")
+
+            return (
+                f"✅ Событие добавлено!\n"
+                f"{emoji} {event.title}\n"
+                f"📅 {event.event_date.strftime('%d.%m.%Y в %H:%M')}\n"
+                f"⏰ Напоминание за {remind_days} дн."
             )
 
-        emoji_map = {
-            "premiere": "🎬",
-            "meeting": "📅",
-            "birthday": "🎂",
-            "other": "📌"
-        }
-        emoji = emoji_map.get(event_type, "📌")
-
-        return (
-            f"✅ Событие добавлено!\n"
-            f"{emoji} {event.title}\n"
-            f"📅 {event.event_date.strftime('%d.%m.%Y в %H:%M')}\n"
-            f"⏰ Напоминание за {remind_days} дн."
-        )
-
-    except ValueError as e:
-        return f"❌ Ошибка формата даты. Используйте формат: ДД.ММ.ГГГГ ЧЧ:ММ (например: 20.04.2026 19:00)"
-    except Exception as e:
-        return f"❌ Ошибка при добавлении события: {str(e)}"
+        except ValueError as e:
+            return "❌ Ошибка формата даты. Используйте формат: ДД.ММ.ГГГГ ЧЧ:ММ (например: 20.04.2026 19:00)"
+        except Exception as e:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(0.5 * (attempt + 1))
+            else:
+                return "❌ Произошла ошибка при добавлении события. Пожалуйста, попробуйте ещё раз."
 
 
 @tool
@@ -94,35 +101,41 @@ async def list_events(limit: int = 10) -> str:
     Returns:
         Список ближайших событий или сообщение, что событий нет
     """
-    try:
-        async with async_session_maker() as session:
-            events = await EventService.get_upcoming_events(session, limit=limit)
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            async with async_session_maker() as session:
+                events = await EventService.get_upcoming_events(session, limit=limit)
 
-        if not events:
-            return "📭 Нет запланированных событий"
+            if not events:
+                return "📭 Нет запланированных событий"
 
-        emoji_map = {
-            "premiere": "🎬",
-            "meeting": "📅",
-            "birthday": "🎂",
-            "other": "📌"
-        }
+            emoji_map = {
+                "premiere": "🎬",
+                "meeting": "📅",
+                "birthday": "🎂",
+                "other": "📌"
+            }
 
-        result = f"📅 Ближайшие события ({len(events)}):\n\n"
+            result = f"📅 Ближайшие события ({len(events)}):\n\n"
 
-        for event in events:
-            emoji = emoji_map.get(event.event_type, "📌")
-            date_str = event.event_date.strftime("%d.%m.%Y в %H:%M")
-            result += f"{emoji} {event.title}\n"
-            result += f"📅 {date_str}\n"
-            if event.remind_days > 0:
-                result += f"⏰ Напоминание за {event.remind_days} дн.\n"
-            result += f"🆔 ID: {event.id}\n\n"
+            for event in events:
+                emoji = emoji_map.get(event.event_type, "📌")
+                date_str = event.event_date.strftime("%d.%m.%Y в %H:%M")
+                result += f"{emoji} {event.title}\n"
+                result += f"📅 {date_str}\n"
+                if event.remind_days > 0:
+                    result += f"⏰ Напоминание за {event.remind_days} дн.\n"
+                result += f"🆔 ID: {event.id}\n\n"
 
-        return result
+            return result
 
-    except Exception as e:
-        return f"❌ Ошибка при получении событий: {str(e)}"
+        except Exception as e:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(0.5 * (attempt + 1))
+            else:
+                return "❌ Произошла ошибка при получении событий. Пожалуйста, попробуйте ещё раз."
 
 
 @tool
@@ -137,35 +150,41 @@ async def search_file(query: str, limit: int = 5) -> str:
     Returns:
         Список найденных файлов со ссылками или сообщение, что файлы не найдены
     """
-    try:
-        async with async_session_maker() as session:
-            files = await YandexDiskService.search_files(session, query, limit=limit)
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            async with async_session_maker() as session:
+                files = await YandexDiskService.search_files(session, query, limit=limit)
 
-        if not files:
-            return f"📭 Файлы по запросу «{query}» не найдены"
+            if not files:
+                return f"📭 Файлы по запросу «{query}» не найдены"
 
-        emoji_map = {
-            "video": "🎬",
-            "photo": "🖼",
-            "document": "📄",
-            "scenario": "📝"
-        }
+            emoji_map = {
+                "video": "🎬",
+                "photo": "🖼",
+                "document": "📄",
+                "scenario": "📝"
+            }
 
-        result = f"📁 Найдено файлов: {len(files)}\n\n"
+            result = f"📁 Найдено файлов: {len(files)}\n\n"
 
-        for file in files:
-            emoji = emoji_map.get(file.file_type, "📎")
-            result += f"{emoji} {file.file_name}\n"
-            if file.public_url:
-                result += f"🔗 {file.public_url}\n"
+            for file in files:
+                emoji = emoji_map.get(file.file_type, "📎")
+                result += f"{emoji} {file.file_name}\n"
+                if file.public_url:
+                    result += f"🔗 {file.public_url}\n"
+                else:
+                    result += f"📂 {file.file_path}\n"
+                result += "\n"
+
+            return result
+
+        except Exception as e:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(0.5 * (attempt + 1))
             else:
-                result += f"📂 {file.file_path}\n"
-            result += "\n"
-
-        return result
-
-    except Exception as e:
-        return f"❌ Ошибка при поиске файлов: {str(e)}"
+                return "❌ Произошла ошибка при поиске файлов. Пожалуйста, попробуйте ещё раз."
 
 
 @tool
@@ -181,46 +200,49 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
     Returns:
         Список найденных файлов со ссылками или сообщение, что файлы не найдены
     """
-    try:
-        from langchain_openai import ChatOpenAI
-        from app.config import settings
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            from langchain_openai import ChatOpenAI
+            from app.config import settings
 
-        # Получаем актуальный список файлов через API
-        all_files = await YandexDiskService.get_files_realtime()
+            # Получаем актуальный список файлов через API
+            all_files = await YandexDiskService.get_files_realtime()
 
-        if not all_files:
-            return "📭 На Яндекс.Диске не найдено файлов"
+            if not all_files:
+                return "📭 На Яндекс.Диске не найдено файлов"
 
-        # Предварительная фильтрация: ищем файлы, содержащие хотя бы одно слово из запроса
-        query_words = query.lower().split()
-        filtered_files = []
+            # Предварительная фильтрация: ищем файлы, содержащие хотя бы одно слово из запроса
+            query_words = query.lower().split()
+            filtered_files = []
 
-        for file in all_files:
-            file_name_lower = file['name'].lower()
-            # Если хотя бы одно слово из запроса есть в названии файла
-            if any(word in file_name_lower for word in query_words):
-                filtered_files.append(file)
+            for file in all_files:
+                file_name_lower = file['name'].lower()
+                # Если хотя бы одно слово из запроса есть в названии файла
+                if any(word in file_name_lower for word in query_words):
+                    filtered_files.append(file)
 
-        # Если после фильтрации ничего не найдено, возвращаем пустой результат
-        if not filtered_files:
-            return f"📭 Файлы по запросу «{query}» не найдены"
+            # Если после фильтрации ничего не найдено, возвращаем пустой результат
+            if not filtered_files:
+                return f"📭 Файлы по запросу «{query}» не найдены"
 
-        # Ограничиваем до 500 файлов для отправки в LLM (берем отфильтрованные)
-        files_for_llm = filtered_files[:500]
+            # Ограничиваем до 500 файлов для отправки в LLM (берем отфильтрованные)
+            files_for_llm = filtered_files[:500]
 
-        # Формируем список названий файлов для LLM
-        file_names = [f"{i+1}. {file['name']}" for i, file in enumerate(files_for_llm)]
-        files_text = "\n".join(file_names)
+            # Формируем список названий файлов для LLM
+            file_names = [f"{i+1}. {file['name']}" for i, file in enumerate(files_for_llm)]
+            files_text = "\n".join(file_names)
 
-        # Создаем промпт для LLM
-        llm = ChatOpenAI(
-            model=settings.llm_model,
-            api_key=settings.openrouter_api_key,
-            base_url=settings.llm_base_url,
-            temperature=0.1,
-        )
+            # Создаем промпт для LLM
+            llm = ChatOpenAI(
+                model=settings.llm_model,
+                api_key=settings.openrouter_api_key,
+                base_url=settings.llm_base_url,
+                temperature=0.1,
+            )
 
-        prompt = f"""Пользователь ищет: "{query}"
+            prompt = f"""Пользователь ищет: "{query}"
 
 Список файлов на Яндекс.Диске:
 {files_text}
@@ -229,51 +251,54 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
 Верни ТОЛЬКО номера файлов через запятую (например: 1,5,12,23).
 Если подходящих файлов нет, верни "НЕТ"."""
 
-        response = await llm.ainvoke(prompt)
-        selected = response.content.strip()
+            response = await llm.ainvoke(prompt)
+            selected = response.content.strip()
 
-        if selected == "НЕТ" or not selected:
-            return f"📭 Файлы по запросу «{query}» не найдены"
+            if selected == "НЕТ" or not selected:
+                return f"📭 Файлы по запросу «{query}» не найдены"
 
-        # Парсим номера выбранных файлов
-        try:
-            indices = [int(num.strip()) - 1 for num in selected.split(",") if num.strip().isdigit()]
-        except:
-            return f"📭 Файлы по запросу «{query}» не найдены"
+            # Парсим номера выбранных файлов
+            try:
+                indices = [int(num.strip()) - 1 for num in selected.split(",") if num.strip().isdigit()]
+            except:
+                return f"📭 Файлы по запросу «{query}» не найдены"
 
-        # Формируем результат
-        emoji_map = {
-            "video": "🎬",
-            "photo": "🖼",
-            "document": "📄",
-            "scenario": "📝"
-        }
+            # Формируем результат
+            emoji_map = {
+                "video": "🎬",
+                "photo": "🖼",
+                "document": "📄",
+                "scenario": "📝"
+            }
 
-        result = f"📁 Найдено файлов: {len(indices)}\n\n"
+            result = f"📁 Найдено файлов: {len(indices)}\n\n"
 
-        for idx in indices[:limit]:
-            if 0 <= idx < len(files_for_llm):
-                file = files_for_llm[idx]
-                emoji = emoji_map.get(file['type'], "📎")
-                result += f"{emoji} {file['name']}\n"
+            for idx in indices[:limit]:
+                if 0 <= idx < len(files_for_llm):
+                    file = files_for_llm[idx]
+                    emoji = emoji_map.get(file['type'], "📎")
+                    result += f"{emoji} {file['name']}\n"
 
-                # Если нет публичной ссылки - создаем её
-                if not file.get('public_url'):
-                    public_url = YandexDiskService.publish_file(file['path'])
-                    if public_url:
-                        file['public_url'] = public_url
+                    # Если нет публичной ссылки - создаем её
+                    if not file.get('public_url'):
+                        public_url = YandexDiskService.publish_file(file['path'])
+                        if public_url:
+                            file['public_url'] = public_url
 
-                # Показываем ссылку
-                if file.get('public_url'):
-                    result += f"🔗 {file['public_url']}\n"
-                else:
-                    result += f"📂 {file['path']}\n"
-                result += "\n"
+                    # Показываем ссылку
+                    if file.get('public_url'):
+                        result += f"🔗 {file['public_url']}\n"
+                    else:
+                        result += f"📂 {file['path']}\n"
+                    result += "\n"
 
-        return result
+            return result
 
-    except Exception as e:
-        return f"❌ Ошибка при умном поиске файлов: {str(e)}"
+        except Exception as e:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(0.5 * (attempt + 1))
+            else:
+                return "❌ Произошла ошибка при умном поиске файлов. Пожалуйста, попробуйте ещё раз."
 
 
 @tool
@@ -287,26 +312,32 @@ async def delete_event(event_id: int) -> str:
     Returns:
         Сообщение об успешном удалении или ошибке
     """
-    try:
-        async with async_session_maker() as session:
-            # Проверяем существование события
-            event = await EventService.get_event_by_id(session, event_id)
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            async with async_session_maker() as session:
+                # Проверяем существование события
+                event = await EventService.get_event_by_id(session, event_id)
 
-            if not event:
-                return f"❌ Событие с ID {event_id} не найдено"
+                if not event:
+                    return f"❌ Событие с ID {event_id} не найдено"
 
-            title = event.title
+                title = event.title
 
-            # Удаляем
-            success = await EventService.delete_event(session, event_id)
+                # Удаляем
+                success = await EventService.delete_event(session, event_id)
 
-            if success:
-                return f"✅ Событие «{title}» удалено"
+                if success:
+                    return f"✅ Событие «{title}» удалено"
+                else:
+                    return f"❌ Не удалось удалить событие"
+
+        except Exception as e:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(0.5 * (attempt + 1))
             else:
-                return f"❌ Не удалось удалить событие"
-
-    except Exception as e:
-        return f"❌ Ошибка при удалении события: {str(e)}"
+                return "❌ Произошла ошибка при удалении события. Пожалуйста, попробуйте ещё раз."
 
 
 # Список всех инструментов для агента

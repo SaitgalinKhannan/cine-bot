@@ -3,6 +3,7 @@ LLM-агент для обработки команд на естественн�
 Использует OpenRouter API для парсинга намерений пользователя
 """
 
+import asyncio
 from typing import Optional
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -97,7 +98,7 @@ class CineBotAgent:
 
     async def process_message(self, message: str, chat_id: int) -> str:
         """
-        Обработать сообщение пользователя
+        Обработать сообщение пользователя с повторными попытками
 
         Args:
             message: Текст сообщения
@@ -115,49 +116,66 @@ class CineBotAgent:
                 "/help — справка"
             )
 
-        try:
-            logger.info(f"Processing message with LLM: {message[:50]}...")
+        max_retries = 3
+        retry_delay = 1.0
 
-            # Вызов LLM с инструментами
-            response = await self.chain.ainvoke({"input": message})
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Processing message with LLM (attempt {attempt + 1}/{max_retries}): {message[:50]}...")
 
-            # Проверяем, есть ли вызовы инструментов
-            if hasattr(response, 'tool_calls') and response.tool_calls:
-                # Выполняем первый вызов инструмента
-                tool_call = response.tool_calls[0]
-                tool_name = tool_call['name']
-                tool_args = tool_call['args']
+                # Вызов LLM с инструментами
+                response = await self.chain.ainvoke({"input": message})
 
-                logger.info(f"Tool call: {tool_name} with args: {tool_args}")
+                # Проверяем, есть ли вызовы инструментов
+                if hasattr(response, 'tool_calls') and response.tool_calls:
+                    # Выполняем первый вызов инструмента
+                    tool_call = response.tool_calls[0]
+                    tool_name = tool_call['name']
+                    tool_args = tool_call['args']
 
-                # Находим и вызываем инструмент
-                for tool in AGENT_TOOLS:
-                    if tool.name == tool_name:
-                        try:
-                            result = await tool.ainvoke(tool_args)
-                            logger.info(f"Tool result: {result[:100]}...")
-                            return result
-                        except Exception as e:
-                            logger.error(f"Tool execution error: {e}")
-                            return f"❌ Ошибка выполнения: {str(e)}"
+                    logger.info(f"Tool call: {tool_name} with args: {tool_args}")
 
-                return "❌ Инструмент не найден"
+                    # Находим и вызываем инструмент
+                    for tool in AGENT_TOOLS:
+                        if tool.name == tool_name:
+                            try:
+                                result = await tool.ainvoke(tool_args)
+                                logger.info(f"Tool result: {result[:100]}...")
+                                return result
+                            except Exception as e:
+                                logger.error(f"Tool execution error: {e}")
+                                # Не показываем внутреннюю ошибку пользователю, пробуем снова
+                                if attempt < max_retries - 1:
+                                    await asyncio.sleep(retry_delay)
+                                    break  # Пробуем снова
+                                return "❌ Произошла ошибка при выполнении запроса. Пожалуйста, попробуйте ещё раз."
 
-            # Если нет вызовов инструментов, возвращаем текстовый ответ
-            if hasattr(response, 'content'):
-                return response.content
-            else:
-                return str(response)
+                    return "❌ Инструмент не найден"
 
-        except Exception as e:
-            logger.error(f"Error processing message with LLM: {e}")
-            return (
-                "❌ Произошла ошибка при обработке запроса.\n\n"
-                "Попробуйте использовать команды:\n"
-                "/addevent — добавить событие\n"
-                "/events — показать события\n"
-                "/find — найти файл"
-            )
+                # Если нет вызовов инструментов, возвращаем текстовый ответ
+                if hasattr(response, 'content'):
+                    return response.content
+                else:
+                    return str(response)
+
+            except Exception as e:
+                logger.error(f"Error processing message with LLM (attempt {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    # Ждём перед следующей попыткой (exponential backoff)
+                    await asyncio.sleep(retry_delay * (attempt + 1))
+                else:
+                    # Все попытки исчерпаны
+                    logger.error(f"All {max_retries} attempts failed for message: {message[:50]}...")
+                    return (
+                        "❌ Не удалось обработать запрос.\n\n"
+                        "Возможно, я не совсем понял вас. Попробуйте переформулировать запрос "
+                        "или используйте команды:\n"
+                        "/addevent — добавить событие\n"
+                        "/events — показать события\n"
+                        "/find — найти файл"
+                    )
+
+        return "❌ Произошла ошибка при обработке запроса."
 
 
 # Глобальный экземпляр агента
