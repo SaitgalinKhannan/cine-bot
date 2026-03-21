@@ -20,7 +20,7 @@ async def cmd_find_file(message: Message):
         await message.answer(
             "🔍 <b>Поиск файлов на Яндекс.Диске</b>\n\n"
             "Использование: <code>/find название файла</code>\n"
-            "Например: <code>/find сценарий Горизонт</code>",
+            "Например: <code>/find сценарий ФИЛЬМ</code>",
             parse_mode="HTML"
         )
         return

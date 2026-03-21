@@ -161,7 +161,7 @@ async def callback_help(callback: CallbackQuery):
         "• <code>запланируй/запланировать</code> — запланировать событие\n\n"
 
         "<b>Примеры:</b>\n"
-        "• <i>Добавь премьеру фильма Горизонт 20 апреля в 19:00</i>\n"
+        "• <i>Добавь премьеру фильма ФИЛЬМ 20 апреля в 19:00</i>\n"
         "• <i>Найди сценарий фильма Асия</i>\n"
         "• <i>Покажи ближайшие события</i>\n\n"
 
@@ -198,7 +198,7 @@ async def callback_add_event(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
         "📝 <b>Добавление нового события</b>\n\n"
         "Введите название события:\n"
-        "(Например: Премьера фильма «Горизонт»)\n\n"
+        "(Например: Премьера фильма «ФИЛЬМ»)\n\n"
         "Для отмены используйте /cancel",
         parse_mode="HTML"
     )
@@ -348,7 +348,7 @@ async def callback_search_files(callback: CallbackQuery):
     await callback.message.answer(
         "🔍 <b>Поиск файлов на Яндекс.Диске</b>\n\n"
         "Введите название файла для поиска:\n"
-        "(Например: сценарий Горизонт)\n\n"
+        "(Например: сценарий ФИЛЬМ)\n\n"
         "Для отмены используйте /cancel",
         parse_mode="HTML"
     )

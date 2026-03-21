@@ -49,7 +49,7 @@ async def cmd_add_event(message: Message, state: FSMContext):
                 "<b>Варианты решения:</b>\n"
                 "1️⃣ Напишите боту в личные сообщения для добавления события\n"
                 "2️⃣ Используйте естественный язык с упоминанием бота:\n"
-                f"   <code>@{bot_info.username} добавь премьеру фильма Горизонт 20 апреля в 19:00</code>\n"
+                f"   <code>@{bot_info.username} добавь премьеру фильма ФИЛЬМ 20 апреля в 19:00</code>\n"
                 "3️⃣ Попросите администратора отключить Privacy Mode в @BotFather\n\n"
                 "📚 Подробнее: см. документацию PRIVACY_MODE_FIX.md",
                 parse_mode="HTML"
@@ -60,7 +60,7 @@ async def cmd_add_event(message: Message, state: FSMContext):
     await message.answer(
         "📝 <b>Добавление нового события</b>\n\n"
         "Введите название события:\n"
-        "(Например: Премьера фильма «Горизонт»)\n\n"
+        "(Например: Премьера фильма «ФИЛЬМ»)\n\n"
         "Для отмены используйте /cancel",
         parse_mode="HTML"
     )
