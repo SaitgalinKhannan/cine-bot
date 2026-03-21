@@ -191,7 +191,8 @@ async def search_file(query: str, limit: int = 5) -> str:
 async def search_file_smart(query: str, limit: int = 10) -> str:
     """
     Умный поиск файлов на Яндекс.Диске через LLM.
-    Получает актуальный список файлов через API и использует LLM для отбора релевантных.
+    Использует кэш (обновляется каждый час) и LLM для отбора релевантных.
+    Обрабатывает файлы по частям для поддержки больших библиотек.
 
     Args:
         query: Поисковый запрос (например: "файлы по фильму Асия", "все сценарии")
@@ -201,29 +202,26 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
         Список найденных файлов со ссылками или сообщение, что файлы не найдены
     """
     max_retries = 3
+    batch_size = 5000  # Размер пачки для обработки
 
     for attempt in range(max_retries):
         try:
             from langchain_openai import ChatOpenAI
             from app.config import settings
 
-            # Получаем актуальный список файлов через API
-            all_files = await YandexDiskService.get_files_realtime()
+            # Получаем список файлов из кэша по частям
+            async with async_session_maker() as session:
+                # Собираем все отфильтрованные файлы из всех пачек
+                filtered_files = []
+                query_words = query.lower().split()
+                
+                async for batch in YandexDiskService.get_all_files_batched(session, batch_size):
+                    # Фильтруем текущую пачку: ищем файлы, содержащие хотя бы одно слово из запроса
+                    for file in batch:
+                        file_name_lower = file.file_name.lower()
+                        if any(word in file_name_lower for word in query_words):
+                            filtered_files.append(file)
 
-            if not all_files:
-                return "📭 На Яндекс.Диске не найдено файлов"
-
-            # Предварительная фильтрация: ищем файлы, содержащие хотя бы одно слово из запроса
-            query_words = query.lower().split()
-            filtered_files = []
-
-            for file in all_files:
-                file_name_lower = file['name'].lower()
-                # Если хотя бы одно слово из запроса есть в названии файла
-                if any(word in file_name_lower for word in query_words):
-                    filtered_files.append(file)
-
-            # Если после фильтрации ничего не найдено, возвращаем пустой результат
             if not filtered_files:
                 return f"📭 Файлы по запросу «{query}» не найдены"
 
@@ -231,7 +229,7 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
             files_for_llm = filtered_files[:500]
 
             # Формируем список названий файлов для LLM
-            file_names = [f"{i + 1}. {file['name']}" for i, file in enumerate(files_for_llm)]
+            file_names = [f"{i + 1}. {file.file_name}" for i, file in enumerate(files_for_llm)]
             files_text = "\n".join(file_names)
 
             # Создаем промпт для LLM
@@ -244,7 +242,7 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
 
             prompt = f"""Пользователь ищет: "{query}"
 
-Список файлов на Яндекс.Диске:
+Список файлов:
 {files_text}
 
 Задача: Выбери наиболее релевантные файлы (максимум {limit} штук).
@@ -276,20 +274,20 @@ async def search_file_smart(query: str, limit: int = 10) -> str:
             for idx in indices[:limit]:
                 if 0 <= idx < len(files_for_llm):
                     file = files_for_llm[idx]
-                    emoji = emoji_map.get(file['type'], "📎")
-                    result += f"{emoji} {file['name']}\n"
+                    emoji = emoji_map.get(file.file_type, "📎")
+                    result += f"{emoji} {file.file_name}\n"
 
                     # Если нет публичной ссылки - создаем её
-                    if not file.get('public_url'):
-                        public_url = YandexDiskService.publish_file(file['path'])
+                    if not file.public_url:
+                        public_url = YandexDiskService.publish_file(file.file_path)
                         if public_url:
-                            file['public_url'] = public_url
+                            file.public_url = public_url
 
                     # Показываем ссылку
-                    if file.get('public_url'):
-                        result += f"🔗 {file['public_url']}\n"
+                    if file.public_url:
+                        result += f"🔗 {file.public_url}\n"
                     else:
-                        result += f"📂 {file['path']}\n"
+                        result += f"📂 {file.file_path}\n"
                     result += "\n"
 
             return result

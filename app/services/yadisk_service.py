@@ -213,6 +213,35 @@ class YandexDiskService:
         return matching_files[:limit]
 
     @staticmethod
+    async def get_all_files_batched(session: AsyncSession, batch_size: int = 5000):
+        """
+        Получить все файлы из кэша по частям (генератор).
+        
+        Args:
+            session: Сессия БД
+            batch_size: Размер одной пачки файлов
+            
+        Yields:
+            Списки файлов размером batch_size
+        """
+        offset = 0
+        
+        while True:
+            stmt = select(YandexFileCache).offset(offset).limit(batch_size)
+            result = await session.execute(stmt)
+            files = list(result.scalars().all())
+            
+            if not files:
+                break
+                
+            yield files
+            offset += batch_size
+            
+            # Если получили меньше чем batch_size, значит это последняя пачка
+            if len(files) < batch_size:
+                break
+
+    @staticmethod
     async def get_file_info(session: AsyncSession, file_id: int) -> Optional[YandexFileCache]:
         """Получить информацию о файле по ID"""
         stmt = select(YandexFileCache).where(YandexFileCache.id == file_id)
