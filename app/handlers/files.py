@@ -1,10 +1,8 @@
 from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
-from urllib.parse import quote
 
-from app.db.base import async_session_maker
-from app.services.yadisk_service import YandexDiskService
+from app.agent.tools import search_file_smart
 from app.utils import escape_html
 
 router = Router()
@@ -12,7 +10,7 @@ router = Router()
 
 @router.message(Command("find"))
 async def cmd_find_file(message: Message):
-    """Поиск файла на Яндекс.Диске"""
+    """Поиск файла на Яндекс.Диске через LLM (умный поиск)"""
     # Извлекаем запрос из команды
     query = message.text.replace("/find", "").strip()
 
@@ -30,47 +28,10 @@ async def cmd_find_file(message: Message):
 
     await message.answer(f"🔍 Ищу файлы по запросу: <b>{safe_query}</b>...", parse_mode="HTML")
 
-    async with async_session_maker() as session:
-        results = await YandexDiskService.search_files(session, query)
+    # Используем умный поиск через LLM (тот же, что и в агенте)
+    result = await search_file_smart.ainvoke({"query": query, "limit": 10})
 
-    if not results:
-        await message.answer(
-            f"📭 Файлы по запросу «{safe_query}» не найдены.\n\n"
-            "Попробуйте изменить запрос или проверьте, что файлы есть на Яндекс.Диске."
-        )
-        return
+    # Экранируем HTML-символы в ответе
+    safe_result = escape_html(result)
 
-    # Формируем ответ
-    response = f"📁 <b>Найдено файлов: {len(results)}</b>\n\n"
-
-    for file in results[:10]:  # Показываем максимум 10 результатов
-        file_type_emoji = {
-            "video": "🎬",
-            "photo": "🖼",
-            "document": "📄",
-            "scenario": "📝",
-        }.get(file.file_type, "📎")
-
-        # Escape file data for safe HTML output
-        safe_filename = escape_html(file.file_name)
-
-        response += f"{file_type_emoji} <b>{safe_filename}</b>\n"
-
-        # Получаем публичную ссылку (создаём если нет)
-        async with async_session_maker() as session:
-            public_url = await YandexDiskService.ensure_public_url(session, file)
-
-        if public_url:
-            safe_url = escape_html(public_url)
-            response += f"🔗 <a href='{safe_url}'>Открыть файл</a>\n"
-        else:
-            # Если не удалось получить публичную ссылку - показываем путь
-            safe_filepath = escape_html(file.file_path)
-            response += f"📂 Путь: <code>{safe_filepath}</code>\n"
-
-        response += "\n"
-
-    if len(results) > 10:
-        response += f"<i>... и ещё {len(results) - 10} файлов</i>"
-
-    await message.answer(response, parse_mode="HTML", disable_web_page_preview=True)
+    await message.answer(safe_result, parse_mode="HTML", disable_web_page_preview=True)
